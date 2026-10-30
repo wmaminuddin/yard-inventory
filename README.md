@@ -29,12 +29,16 @@ npm install
 npm run dev
 ```
 
-8. Deploy rules + hosting:
+8. Deploy rules + hosting (one-time browser login):
 
 ```bash
 npx firebase login
+npx firebase use --add
 npm run deploy
 ```
+
+> Hosting deploy needs your Google account in the Firebase CLI. The app
+> builds locally without it (`npm run build` / `npm run dev`).
 
 After deploy, open the Hosting URL:
 
