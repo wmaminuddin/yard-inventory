@@ -1,0 +1,21 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "transactions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "serverTime", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "stocktakeSessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "yardId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "startedAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

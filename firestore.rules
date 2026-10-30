@@ -1,0 +1,39 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // MVP: yard ops use staff number (no Auth). Admin mutations should use Auth.
+    // Upgrade later with Cloud Functions for stronger server-side validation.
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    match /yards/{yardId} {
+      allow read: if true;
+      allow create, update, delete: if isSignedIn();
+    }
+
+    match /units/{chassisNo} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if isSignedIn();
+    }
+
+    match /transactions/{txnId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if false;
+    }
+
+    match /stocktakeSessions/{sessionId} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if isSignedIn();
+    }
+
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+  }
+}
