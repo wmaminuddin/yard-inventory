@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
+import {
+  type BatchInProgress,
+  type BatchInRowResult,
+  runBatchIn,
+} from '../services/batchIn'
 import { downloadAllCsvZipLike, downloadCsv, toCsv } from '../lib/csv'
 import { isFirebaseConfigured } from '../lib/firebase'
+import { downloadBatchTemplate, parseChassisFromSpreadsheet } from '../lib/spreadsheet'
 import type { StocktakeSession, Transaction, Unit, Yard } from '../lib/types'
 import { useAuth } from '../hooks/useAuth'
 import { listTransactions, listUnits } from '../services/inventory'
@@ -8,7 +14,13 @@ import { getSettings, setAdminPin } from '../services/settings'
 import { listAllSessions } from '../services/stocktake'
 import { createYard, listYards, updateYard } from '../services/yards'
 
-type Tab = 'transactions' | 'units' | 'yards' | 'stocktakes' | 'settings'
+type Tab =
+  | 'transactions'
+  | 'units'
+  | 'yards'
+  | 'batch'
+  | 'stocktakes'
+  | 'settings'
 
 export function AdminPage() {
   const { user, loading: authLoading, login, logout } = useAuth()
@@ -24,8 +36,14 @@ export function AdminPage() {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [newYard, setNewYard] = useState('')
+  const [newYardCapacity, setNewYardCapacity] = useState('0')
   const [pin, setPin] = useState('')
   const [pinHas, setPinHas] = useState(false)
+  const [batchYardId, setBatchYardId] = useState('')
+  const [batchChassis, setBatchChassis] = useState<string[]>([])
+  const [batchWarnings, setBatchWarnings] = useState<string[]>([])
+  const [batchProgress, setBatchProgress] = useState<BatchInProgress | null>(null)
+  const [batchResults, setBatchResults] = useState<BatchInRowResult[]>([])
 
   async function refresh() {
     if (!isFirebaseConfigured) return
@@ -240,6 +258,7 @@ export function AdminPage() {
             ['transactions', 'Transactions'],
             ['units', 'Units'],
             ['yards', 'Yards'],
+            ['batch', 'Batch IN'],
             ['stocktakes', 'Stock takes'],
             ['settings', 'Settings'],
           ] as const
@@ -329,8 +348,9 @@ export function AdminPage() {
             onSubmit={(e) => {
               e.preventDefault()
               void (async () => {
-                await createYard(newYard)
+                await createYard(newYard, Number(newYardCapacity) || 0)
                 setNewYard('')
+                setNewYardCapacity('0')
                 await refresh()
               })()
             }}
@@ -341,15 +361,27 @@ export function AdminPage() {
               onChange={(e) => setNewYard(e.target.value)}
               required
             />
+            <input
+              type="number"
+              min={0}
+              step={1}
+              placeholder="Max capacity"
+              title="Theoretical max capacity (0 = not set)"
+              value={newYardCapacity}
+              onChange={(e) => setNewYardCapacity(e.target.value)}
+              style={{ width: '8rem' }}
+            />
             <button className="primary" type="submit">
               Add yard
             </button>
           </form>
+          <p className="muted">Max capacity 0 = hide % on TV dashboard.</p>
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
                   <th>Name</th>
+                  <th>Max capacity</th>
                   <th>Active</th>
                   <th />
                 </tr>
@@ -364,6 +396,22 @@ export function AdminPage() {
                           const name = e.target.value.trim()
                           if (name && name !== y.name) {
                             void updateYard(y.id, { name }).then(refresh)
+                          }
+                        }}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        min={0}
+                        step={1}
+                        defaultValue={y.maxCapacity}
+                        key={`${y.id}-${y.maxCapacity}`}
+                        style={{ width: '7rem' }}
+                        onBlur={(e) => {
+                          const maxCapacity = Math.max(0, Math.floor(Number(e.target.value) || 0))
+                          if (maxCapacity !== y.maxCapacity) {
+                            void updateYard(y.id, { maxCapacity }).then(refresh)
                           }
                         }}
                       />
@@ -383,6 +431,157 @@ export function AdminPage() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {tab === 'batch' && (
+        <div className="stack">
+          <p className="muted">
+            Upload a CSV/Excel file of chassis numbers to batch IN into one yard. Units already at
+            another yard are transferred automatically. Duplicates already IN this yard are skipped.
+          </p>
+          <div className="row">
+            <button type="button" className="ghost" onClick={() => downloadBatchTemplate()}>
+              Download template CSV
+            </button>
+          </div>
+          <label>
+            Target yard
+            <select
+              value={batchYardId}
+              onChange={(e) => setBatchYardId(e.target.value)}
+              required
+            >
+              <option value="">Select yard…</option>
+              {yards
+                .filter((y) => y.active)
+                .map((y) => (
+                  <option key={y.id} value={y.id}>
+                    {y.name}
+                    {y.maxCapacity > 0 ? ` (cap ${y.maxCapacity})` : ''}
+                  </option>
+                ))}
+            </select>
+          </label>
+          <label>
+            Spreadsheet (.csv, .xlsx, .xls)
+            <input
+              type="file"
+              accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (!file) return
+                void (async () => {
+                  setMsg(null)
+                  setBatchResults([])
+                  const buf = await file.arrayBuffer()
+                  const parsed = parseChassisFromSpreadsheet(buf)
+                  setBatchChassis(parsed.chassisNos)
+                  setBatchWarnings(parsed.warnings)
+                  setMsg(`Loaded ${parsed.chassisNos.length} chassis from ${file.name}`)
+                })().catch((err) => setMsg(String(err)))
+              }}
+            />
+          </label>
+          {batchWarnings.length > 0 && (
+            <ul className="muted">
+              {batchWarnings.map((w) => (
+                <li key={w}>{w}</li>
+              ))}
+            </ul>
+          )}
+          {batchChassis.length > 0 && (
+            <>
+              <p>
+                Preview ({batchChassis.length} unique):{' '}
+                <code>{batchChassis.slice(0, 12).join(', ')}</code>
+                {batchChassis.length > 12 ? '…' : ''}
+              </p>
+              <button
+                type="button"
+                className="primary"
+                disabled={!batchYardId || busy}
+                onClick={() => {
+                  void (async () => {
+                    setBusy(true)
+                    setBatchResults([])
+                    setMsg(null)
+                    try {
+                      const staffNo = user?.email ?? 'admin-batch'
+                      const results = await runBatchIn({
+                        yardId: batchYardId,
+                        staffNo,
+                        chassisNos: batchChassis,
+                        onProgress: setBatchProgress,
+                      })
+                      setBatchResults(results)
+                      const ok = results.filter((r) => r.status === 'ok').length
+                      const tr = results.filter((r) => r.status === 'transferred').length
+                      const sk = results.filter((r) => r.status === 'skipped').length
+                      const fl = results.filter((r) => r.status === 'failed').length
+                      setMsg(
+                        `Batch done: ${ok} IN, ${tr} transferred, ${sk} skipped, ${fl} failed`,
+                      )
+                      await refresh()
+                    } catch (err) {
+                      setMsg(err instanceof Error ? err.message : String(err))
+                    } finally {
+                      setBusy(false)
+                      setBatchProgress(null)
+                    }
+                  })()
+                }}
+              >
+                Run batch IN
+              </button>
+            </>
+          )}
+          {batchProgress && (
+            <p className="muted">
+              Progress {batchProgress.processed}/{batchProgress.total}
+              {batchProgress.current ? ` · ${batchProgress.current}` : ''}
+            </p>
+          )}
+          {batchResults.length > 0 && (
+            <>
+              <div className="row">
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={() =>
+                    downloadCsv(
+                      'batch-in-results.csv',
+                      toCsv(batchResults as unknown as Record<string, unknown>[]),
+                    )
+                  }
+                >
+                  Download results CSV
+                </button>
+              </div>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Chassis</th>
+                      <th>Status</th>
+                      <th>Message</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {batchResults.map((r) => (
+                      <tr key={r.chassisNo}>
+                        <td>
+                          <code>{r.chassisNo}</code>
+                        </td>
+                        <td>{r.status}</td>
+                        <td>{r.message}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </div>
       )}
 

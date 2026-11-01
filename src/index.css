@@ -448,10 +448,60 @@ th {
 }
 
 .dash-count {
-  margin: 0.4rem 0;
+  margin: 0.4rem 0 0.15rem;
   font-size: clamp(2.8rem, 7vw, 4.2rem);
   font-weight: 800;
   line-height: 1;
+}
+
+.dash-cap {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.dash-card-warn .dash-cap {
+  color: var(--warn);
+}
+
+.dash-card-over .dash-cap {
+  color: var(--danger);
+}
+
+.dash-card-warn {
+  border-color: color-mix(in srgb, var(--warn) 45%, var(--line));
+}
+
+.dash-card-over {
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--line));
+}
+
+.cap-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: #0d1524;
+  border: 1px solid var(--line);
+  overflow: hidden;
+  margin-bottom: 0.65rem;
+}
+
+.cap-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+.cap-bar-ok {
+  background: var(--accent);
+}
+
+.cap-bar-warn {
+  background: var(--warn);
+}
+
+.cap-bar-over {
+  background: var(--danger);
 }
 
 .dash-recent {

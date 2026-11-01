@@ -12,7 +12,7 @@ export default function App() {
   useEffect(() => startSyncLoop(), [])
 
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/yard-inventory">
       <Routes>
         <Route element={<Layout />}>
           <Route index element={<HomePage />} />

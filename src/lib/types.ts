@@ -1,11 +1,13 @@
 export type TxnType = 'IN' | 'OUT' | 'ADJUST_IN' | 'ADJUST_OUT' | 'TRANSFER'
-export type TxnSource = 'live' | 'offline' | 'stocktake'
+export type TxnSource = 'live' | 'offline' | 'stocktake' | 'batch'
 export type StocktakeStatus = 'open' | 'review' | 'confirmed' | 'cancelled'
 
 export interface Yard {
   id: string
   name: string
   active: boolean
+  /** Theoretical max units; 0 = not set (no % on dashboard) */
+  maxCapacity: number
   createdAt: number
   updatedAt: number
 }

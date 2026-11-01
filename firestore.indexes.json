@@ -1,13 +1,6 @@
 {
   "indexes": [
     {
-      "collectionGroup": "transactions",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "serverTime", "order": "DESCENDING" }
-      ]
-    },
-    {
       "collectionGroup": "stocktakeSessions",
       "queryScope": "COLLECTION",
       "fields": [

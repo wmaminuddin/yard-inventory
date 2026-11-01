@@ -6,6 +6,13 @@ import { subscribeRecentTransactions, subscribeUnits } from '../services/invento
 import { listOpenSessionsForYard } from '../services/stocktake'
 import { subscribeYards } from '../services/yards'
 
+function capacityClass(count: number, max: number): string {
+  if (max <= 0) return ''
+  if (count > max) return 'over'
+  if (count / max >= 0.9) return 'warn'
+  return 'ok'
+}
+
 export function DashboardPage() {
   const [yards, setYards] = useState<Yard[]>([])
   const [units, setUnits] = useState<Unit[]>([])
@@ -89,17 +96,43 @@ export function DashboardPage() {
       </header>
 
       <div className="dash-grid">
-        {activeYards.map((y) => (
-          <article key={y.id} className="dash-card">
-            <h2>{y.name}</h2>
-            <p className="dash-count">{counts.get(y.id) ?? 0}</p>
-            {openByYard[y.id] ? (
-              <span className="pill warn">Stock take open</span>
-            ) : (
-              <span className="muted">In stock</span>
-            )}
-          </article>
-        ))}
+        {activeYards.map((y) => {
+          const count = counts.get(y.id) ?? 0
+          const max = y.maxCapacity ?? 0
+          const pct = max > 0 ? Math.round((count / max) * 100) : null
+          const barPct = max > 0 ? Math.min(100, Math.round((count / max) * 100)) : 0
+          const level = capacityClass(count, max)
+
+          return (
+            <article
+              key={y.id}
+              className={`dash-card${level ? ` dash-card-${level}` : ''}`}
+            >
+              <h2>{y.name}</h2>
+              <p className="dash-count">{count}</p>
+              {pct !== null ? (
+                <>
+                  <p className="dash-cap">
+                    {pct}% of {max}
+                  </p>
+                  <div className="cap-bar" aria-hidden>
+                    <div
+                      className={`cap-bar-fill cap-bar-${level || 'ok'}`}
+                      style={{ width: `${barPct}%` }}
+                    />
+                  </div>
+                </>
+              ) : (
+                <p className="muted">No capacity set</p>
+              )}
+              {openByYard[y.id] ? (
+                <span className="pill warn">Stock take open</span>
+              ) : (
+                <span className="muted">In stock</span>
+              )}
+            </article>
+          )
+        })}
         {activeYards.length === 0 && (
           <p className="muted">No active yards — add some in Admin.</p>
         )}
